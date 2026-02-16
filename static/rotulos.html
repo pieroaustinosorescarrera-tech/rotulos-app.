@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rótulos - Anclajes / Pernos</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial;margin:24px;max-width:1100px}
+    .row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+    label{display:flex;flex-direction:column;font-size:12px;gap:6px;min-width:220px}
+    input,select{padding:8px;border:1px solid #ccc;border-radius:8px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{border-bottom:1px solid #eee;padding:8px;font-size:13px;vertical-align:top}
+    th{background:#fafafa;text-align:left}
+    button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer}
+    .btn{background:#111;color:#fff}
+    .btn2{background:#f2f2f2}
+    .right{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}
+    .small{font-size:12px;color:#666}
+    .danger{color:#b00020}
+    .w80{width:80px}
+    .w100{width:100px}
+    .w140{width:140px}
+  </style>
+</head>
+<body>
+  <h2>Generador de Rótulos (PDF)</h2>
+  <div class="row">
+    <label>Producto
+      <select id="producto">
+        <option value="anclajes" selected>Anclajes</option>
+        <option value="pernos">Pernos</option>
+      </select>
+    </label>
+    <label>Cliente
+      <input id="cliente" placeholder="BATALLA DE JUNÍN S.A.C" />
+    </label>
+    <label>Obra
+      <input id="obra" placeholder="EDIFICIO SANTA CRUZ" />
+    </label>
+    <label>Orden de fabricación (OF)
+      <input id="of" placeholder="724-26" />
+    </label>
+    <label>N° de colada
+      <input id="colada" placeholder="1596" />
+    </label>
+  </div>
+
+  <div class="row">
+    <label style="min-width:auto;flex-direction:row;align-items:center;gap:8px">
+
+</label>
+    <button class="btn2" id="addRow">+ Agregar rótulo</button>
+    <span class="small">Unidad (1/N, 2/N, …) se calcula automáticamente.</span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="w80">Punto</th>
+        <th class="w80">Inyección</th>
+        <th id="colEspecial" class="w140">Cables</th>
+        <th class="w100">Bulbo</th>
+        <th class="w100">Largo</th>
+        <th class="w100">Sobrelargo</th>
+        <th class="w100">Total</th>
+        <th class="w80"></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="right">
+    <span id="msg" class="small"></span>
+    <button class="btn" id="gen">Generar PDF</button>
+  </div>
+
+<script>
+  const tbody = document.getElementById("tbody");
+  const producto = document.getElementById("producto");
+  const colEspecial = document.getElementById("colEspecial");
+  const msg = document.getElementById("msg");
+
+  function rowTemplate() {
+    const isPerno = producto.value === "pernos";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input class="punto w80" placeholder="4.23"></td>
+      <td><input class="inyeccion w80" placeholder="IU/IR/IR1"></td>
+      <td>${isPerno
+          ? `<input class="tipo_perno w140" placeholder="TIPO PERNO">`
+          : `<input class="cables w80" type="number" min="0" step="1" value="0">`
+        }</td>
+      <td><input class="bulbo w100" type="number" min="0" step="0.01" value="0"></td>
+      <td><input class="largo w100" type="number" min="0" step="0.01" value="0"></td>
+      <td><input class="sobrelargo w100" type="number" min="0" step="0.01" value="0"></td>
+      <td class="total w100">0.00</td>
+      <td><button class="btn2 del">Quitar</button></td>
+    `;
+    tr.querySelectorAll("input.bulbo,input.largo,input.sobrelargo").forEach(inp=>{
+      inp.addEventListener("input", ()=>updateTotal(tr));
+    });
+    tr.querySelector(".del").addEventListener("click", ()=>tr.remove());
+    return tr;
+  }
+
+  function updateTotal(tr){
+    const b = parseFloat(tr.querySelector(".bulbo").value || "0");
+    const l = parseFloat(tr.querySelector(".largo").value || "0");
+    const s = parseFloat(tr.querySelector(".sobrelargo").value || "0");
+    tr.querySelector(".total").textContent = (b+l+s).toFixed(2);
+  }
+
+  function refreshEspecialHeader(){
+    colEspecial.textContent = (producto.value === "pernos") ? "Tipo de perno" : "Cables";
+  }
+
+  document.getElementById("addRow").addEventListener("click", ()=>{
+    const tr = rowTemplate();
+    tbody.appendChild(tr);
+    updateTotal(tr);
+  });
+
+  producto.addEventListener("change", ()=>{
+    refreshEspecialHeader();
+    // reconstruir filas para cambiar columna cables/tipo_perno
+    const rows = [...tbody.querySelectorAll("tr")];
+    tbody.innerHTML = "";
+    rows.forEach(()=> {
+      const tr = rowTemplate();
+      tbody.appendChild(tr);
+      updateTotal(tr);
+    });
+  });
+
+  document.getElementById("gen").addEventListener("click", async ()=>{
+    msg.textContent = "";
+    msg.className = "small";
+
+    const cliente = document.getElementById("cliente").value.trim();
+    const obra = document.getElementById("obra").value.trim();
+    const of = document.getElementById("of").value.trim();
+    const colada = document.getElementById("colada").value.trim();
+
+    if(!cliente || !obra || !of || !colada){
+      msg.textContent = "Faltan datos de cabecera (Cliente/Obra/OF/Colada).";
+      msg.className = "small danger";
+      return;
+    }
+
+    const items = [];
+    const rows = [...tbody.querySelectorAll("tr")];
+    if(rows.length === 0){
+      msg.textContent = "Agrega al menos 1 rótulo.";
+      msg.className = "small danger";
+      return;
+    }
+
+    for(const tr of rows){
+      const punto = tr.querySelector(".punto").value.trim();
+      const inyeccion = tr.querySelector(".inyeccion").value.trim();
+      const bulbo = parseFloat(tr.querySelector(".bulbo").value || "0");
+      const largo = parseFloat(tr.querySelector(".largo").value || "0");
+      const sobrelargo = parseFloat(tr.querySelector(".sobrelargo").value || "0");
+
+      if(!punto || !inyeccion){
+        msg.textContent = "Cada rótulo debe tener Punto e Inyección.";
+        msg.className = "small danger";
+        return;
+      }
+
+      if(producto.value === "anclajes"){
+        const cables = parseInt(tr.querySelector(".cables").value || "0", 10);
+        items.push({punto, inyeccion, cables, bulbo, largo, sobrelargo});
+      } else {
+        const tipo_perno = tr.querySelector(".tipo_perno").value.trim();
+        if(!tipo_perno){
+          msg.textContent = "En pernos, cada rótulo debe tener Tipo de perno.";
+          msg.className = "small danger";
+          return;
+        }
+        items.push({punto, inyeccion, tipo_perno, bulbo, largo, sobrelargo});
+      }
+    }
+
+    const payload = { producto: producto.value, cliente, obra, of, colada, items };
+
+    try{
+       const res = await fetch("/generate-pdf", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const txt = await res.text();
+        msg.textContent = `Error ${res.status}: ${txt}`;
+        msg.className = "small danger";
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${producto.value}_${of}_${obra}`.replaceAll(" ","_") + ".pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      msg.textContent = "PDF generado y descargado.";
+      msg.className = "small";
+    } catch(e){
+      msg.textContent = "No se pudo generar el PDF (revisa que el servidor esté corriendo).";
+      msg.className = "small danger";
+    }
+  });
+
+  // init
+  refreshEspecialHeader();
+  tbody.appendChild(rowTemplate());
+</script>
+</body>
+</html>
